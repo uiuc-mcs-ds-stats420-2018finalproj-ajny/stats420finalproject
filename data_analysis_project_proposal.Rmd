@@ -1,0 +1,49 @@
+---
+title: "Data Analysis Project Proposal"
+author:
+- "STAT 420, Summer 2018"
+- "Amod Augustin - NetID:"
+- "Jeff Gerlach - NetID: gerlach5"
+- "Yongwoo Noh - NetID:"
+- "Naveen Vasu - NetID:"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+***
+
+## Project Title
+#### Put title here
+
+***
+
+## Dataset Description
+
+Put description of dataset here:
+
+ - List variables (not necessarily all of them - at least those of greatest importance)
+ - Reader should understand dataset without having to look at the data itself or other documentation
+ 
+
+***
+
+## Dataset Background Information
+
+Citation of data source (include link to or copy of data).
+
+***
+
+## Statement of Interest
+
+State business, science, research, or personal interest we have in the dataset that we hope to explore.
+
+***
+
+## Evidence Data Can Be Loaded Into `R`
+
+ - Load the data.
+ - Print the first few values of the response variable.
