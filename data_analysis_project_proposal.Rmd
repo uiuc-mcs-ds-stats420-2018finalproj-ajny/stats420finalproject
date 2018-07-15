@@ -16,12 +16,11 @@ urlcolor: cyan
 
 ***
 
-## Project Title
-#### Put title here
+## Predicting Sale Prices In The Melbourne Housing Market
 
 ***
 
-## Dataset Description
+### Dataset Description
 
 Put description of dataset here:
 
@@ -31,19 +30,31 @@ Put description of dataset here:
 
 ***
 
-## Dataset Background Information
+### Dataset Background Information
 
-Citation of data source (include link to or copy of data).
+Citation of data source:
+
+Melbourne, Australia Housing Market data from January 2016 scraped from publically available results posted every week on Domain.com.au by Tony Pino.
+
+https://www.kaggle.com/anthonypino/melbourne-housing-market#Melbourne_housing_FULL.csv
+
+Released Under CC BY-NC-SA 4.0:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ***
 
-## Statement of Interest
+### Statement of Interest
 
 State business, science, research, or personal interest we have in the dataset that we hope to explore.
 
 ***
 
-## Evidence Data Can Be Loaded Into `R`
+### Evidence Data Can Be Loaded Into `R`
 
- - Load the data.
- - Print the first few values of the response variable.
+```{r, message = FALSE, warning = FALSE}
+library(readr)
+housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y")))
+head(housing$Price) # have not removed NA values yet
+```
+ 
+ 
