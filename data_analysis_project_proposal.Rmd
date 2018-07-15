@@ -31,7 +31,7 @@ Reader should understand dataset without having to look at the data itself or ot
     + h - house, cottage, villa, semi, terrace
     + u - unit, duplex
     + t - townhouse
- * Price: Sale price in Australian dollars
+ * Price: Sale price in Australian dollars (AUD)
  * Method: 
     + PI - property passed in
     + PN - sold prior not disclosed
