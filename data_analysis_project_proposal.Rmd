@@ -4,8 +4,8 @@ author:
 - "STAT 420, Summer 2018"
 - "Amod Augustin - NetID: amoda2"
 - "Jeff Gerlach - NetID: gerlach5"
-- "Yongwoo Noh - NetID:"
-- "Naveen Vasu - NetID:"
+- "Yongwoo Noh - NetID: yongwoo3"
+- "Naveen Vasu - NetID: nvasu2"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output:
   html_document: 
