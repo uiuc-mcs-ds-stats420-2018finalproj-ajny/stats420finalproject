@@ -16,13 +16,13 @@ urlcolor: cyan
 
 ***
 
-## Predicting Sale Prices In The Melbourne Housing Market
+## Price Analysis and Prediction for Melbourne Housing Market
 
 ***
 
 ### Dataset Description
 
-Reader should understand dataset without having to look at the data itself or other documentation (put a descriptive summary here).
+The dataset used in this project is a compilation of publically available housing data from Melbourne, Austrailia that had been scraped weekly from the website https://www.domain.com.au/ between January 28, 2016 and March 17th 2018 and shared on the data science/machine learning competition website https://www.kaggle.com. The user that provided the dataset also cleaned the data and provided some information from another source (namely the number of bedrooms) - there are missing values that will need to be dealt with in the data for the 34,857 listings provided. Below is a brief description of each column in the provided CSV (where each observation is a house listed for sale in Melbourne between 01/28/2016 and 03/17/2018):
  
  * Suburb: Name of Suburb in Melbourne
  * Address: Address of house that was sold
