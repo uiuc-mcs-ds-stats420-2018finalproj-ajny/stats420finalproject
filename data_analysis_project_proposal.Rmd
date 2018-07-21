@@ -75,7 +75,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ### Statement of Interest
 
-State business, science, research, or personal interest we have in the dataset that we hope to explore.
+Our team would like to identify the factors which affect home prices, explore trends in the housing market over time, and compare similar house listings in different suburbs to see how location affects sale price in a localized area. With the model we derive here, we hope to provide insight into housing prices and in the future apply our findings to other markets to see if it is possible to find good deals for property purchases where you can get the most value for your money.
 
 ***
 
