@@ -84,7 +84,156 @@ Our team would like to identify the factors which affect home prices, explore tr
 ```{r, message = FALSE, warning = FALSE}
 library(readr)
 housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y")))
-head(housing$Price) # have not removed NA values yet
+
+#Removing the missing data rows
+housing = subset(housing, housing$Price != "NA")
+housing = subset(housing, housing$BuildingArea != "NA")
+housing = subset(housing, housing$YearBuilt != "NA")
+housing = subset(housing, housing$Landsize != "NA")
+nrow(housing)
+
+housing$Type = as.factor(housing$Type)
+
+str(housing)
 ```
  
- 
+### Fitting models
+
+Add details here for models.... 4 types of model here additive, quadratic, two way, three way interactions
+```{r}
+price_model_all_add = lm(Price ~ ., data = housing)
+(n = length(resid(price_model_all_add)))
+price_model_quadratic = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing)
+price_model_two_way = lm(Price ~ .^2, data = housing)
+#price_model_three_way = lm(Price ~ .^3, data = housing)
+
+
+```
+
+### Find influential data points and remove them from the dataset
+
+```{r}
+
+# Finding Leverages
+sum(hatvalues(price_model_all_add) > 2 * mean(hatvalues(price_model_all_add)))
+sum(hatvalues(price_model_quadratic) > 2 * mean(hatvalues(price_model_quadratic)))
+sum(hatvalues(price_model_two_way) > 2 * mean(hatvalues(price_model_two_way)))
+#sum(hatvalues(price_model_three_way) > 2 * mean(hatvalues(price_model_three_way)))
+
+# Finding outliers
+length(rstandard(price_model_all_add)[abs(rstandard(price_model_all_add)) > 2])
+length(rstandard(price_model_quadratic)[abs(rstandard(price_model_quadratic)) > 2])
+length(rstandard(price_model_two_way)[abs(rstandard(price_model_two_way)) > 2])
+#length(rstandard(price_model_three_way)[abs(rstandard(price_model_three_way)) > 2])
+
+# Finding influential data points
+cd_price_model_all_add = cooks.distance(price_model_all_add)
+cd_price_model_quadratic = cooks.distance(price_model_quadratic)
+cd_price_model_two_way = cooks.distance(price_model_two_way)
+#(cd_price_model_three_way = cooks.distance(price_model_three_way))
+
+# Models after removing the influential data points
+price_model_all_add_no_influence = lm(Price ~ ., data = housing,
+                   subset = cd_price_model_all_add < 4 / length(cd_price_model_all_add))
+price_model_quadratic_no_influence = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing,
+                   subset = cd_price_model_quadratic < 4 / length(cd_price_model_quadratic))
+price_model_two_way_no_influence = lm(Price ~ .^2, data = housing,
+                   subset = cd_price_model_two_way < 4 / length(cd_price_model_two_way))
+#price_model_three_way_no_influence = lm(Price ~ .^3, data = housing,
+#                   subset = cd_price_model_three_way < 4 / length(cd_price_model_three_way))
+
+# q-q plots - normality check
+qqnorm(resid(price_model_all_add_no_influence), pch = 20)
+qqline(resid(price_model_all_add_no_influence))
+qqnorm(resid(price_model_quadratic_no_influence), pch = 20)
+qqline(resid(price_model_quadratic_no_influence))
+qqnorm(resid(price_model_two_way_no_influence), pch = 20)
+qqline(resid(price_model_two_way_no_influence))
+#qqnorm(resid(price_model_three_way_no_influence), pch = 20)
+#qqline(resid(price_model_three_way_no_influence))
+
+
+# Fitted vs residuals  - constant variance checks
+plot(fitted(price_model_all_add_no_influence), resid(price_model_all_add_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+plot(fitted(price_model_quadratic_no_influence), resid(price_model_quadratic_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+plot(fitted(price_model_two_way_no_influence), resid(price_model_two_way_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+#plot(fitted(price_model_three_way_no_influence), resid(price_model_three_way_no_influence), col = "grey", pch = 20,
+#     xlab = "Fitted", ylab = "Residual",
+#     main = "mtcars: Fitted versus Residuals")
+#abline(h = 0, col = "darkorange", lwd = 2)
+```
+
+
+### Fitting models
+
+```{r}
+car::vif(price_model_all_add)
+
+# Removed Collinearity and making smaller model
+model_small_add = lm(Price ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
+
+anova(model_small_add, price_model_all_add)
+```
+
+anova notice that using an F-test to compare the two models, we would prefer the smaller model.
+
+### Apply transformation to the response since values are bigger for Price predictor
+```{r}
+trans_price_model_all_add = lm(log(Price) ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
+
+plot(fitted(trans_price_model_all_add), resid(trans_price_model_all_add), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+
+# q-q plots - normality check
+qqnorm(resid(trans_price_model_all_add), pch = 20)
+qqline(resid(trans_price_model_all_add))
+```
+
+After transformation we get better constant variance
+After transformation we get better normality distribution
+
+### Finding model using AIC and BIC for additive model
+```{r}
+length(coef(trans_price_model_all_add))
+trans_price_model_all_add_aic = step(trans_price_model_all_add, direction = "backward", trace = 0)
+length(coef(trans_price_model_all_add_aic))
+trans_price_model_all_add_bic = step(trans_price_model_all_add, direction = "backward", trace = 0, k=log(n))
+length(coef(trans_price_model_all_add_bic))
+```
+This also proves that the smaller model is the best model with lesser number of predictors
+
+### Finding model using AIC and BIC for Quadratic & Two-way Interaction model
+```{r}
+length(coef(price_model_quadratic))
+price_model_quadratic_aic = step(price_model_quadratic, direction = "backward", trace = 0)
+length(coef(price_model_quadratic_aic))
+price_model_quadratic_bic = step(price_model_quadratic, direction = "backward", trace = 0, k=log(n))
+length(coef(price_model_quadratic_bic))
+
+length(coef(price_model_two_way))
+price_model_two_way_aic = step(price_model_two_way, direction = "backward", trace = 0)
+length(coef(price_model_two_way_aic))
+price_model_two_way_bic = step(price_model_two_way, direction = "backward", trace = 0, k=log(n))
+length(coef(price_model_two_way_bic))
+```
+
+BIC of Quadratic Model has the lowest number of predictors i.e. 44. 
+BIC of Two-way interaction model has 158 predictors.
+
+We will choose the BIC quadratic model which has the lowest number of predictors so far.
+
+which is
+lm(formula = Price ~ Rooms + Type + Bathroom + Car + Landsize + 
+    BuildingArea + YearBuilt + CouncilArea + I(Rooms^2) + I(Landsize^2) + 
+    I(BuildingArea^2), data = housing)
