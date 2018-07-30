@@ -1,0 +1,248 @@
+---
+title: "Data Analysis Project Final Report"
+author:
+- "STAT 420, Summer 2018"
+- "Amod Augustin - NetID: amoda2"
+- "Jeff Gerlach - NetID: gerlach5"
+- "Yongwoo Noh - NetID: yongwoo3"
+- "Naveen Vasu - NetID: nvasu2"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: 
+    toc: yes
+  pdf_document: default
+urlcolor: cyan
+---
+
+***
+
+## Price Analysis and Prediction for Melbourne Housing Market
+
+***
+
+### Introduction
+
+The dataset used in this project is a compilation of publically available housing data from Melbourne, Austrailia that had been scraped weekly from the website https://www.domain.com.au/ between January 28, 2016 and March 17th 2018 and shared on the data science/machine learning competition website https://www.kaggle.com. The user that provided the dataset also cleaned the data and provided some information from another source (namely the number of bedrooms) - there are missing values that will need to be dealt with in the data for the 34,857 listings provided. 
+
+Below is a brief description of each column in the provided CSV (where each observation is a house listed for sale in Melbourne between 01/28/2016 and 03/17/2018):
+ 
+ * Suburb: Name of Suburb in Melbourne
+ * Address: Address of house that was sold
+ * Rooms: Number of rooms in house that was sold
+ * Type: 
+    + h - house, cottage, villa, semi, terrace
+    + u - unit, duplex
+    + t - townhouse
+ * Price: Sale price in Australian dollars (AUD)
+ * Method: 
+    + PI - property passed in
+    + PN - sold prior not disclosed
+    + S - property sold
+    + SA - sold after auction
+    + SN - sold not disclosed
+    + SP - property sold prior
+    + SS - sold after auction price not disclosed
+    + VB - vendor bid
+    + W - withdrawn prior to auction
+ * SellerG: Real estate agent's name
+ * Date: Date house was sold
+ * Distance: Distance (in km) from Melbourne's central business district
+ * Postcode: Postal Code
+ * Bedroom2: # of bedrooms (from a different source)
+ * Bathroom: # of bathrooms
+ * Car: # of spots for cars
+ * Landsize: Size of property (land) in meters
+ * BuildingArea: Building size in meters
+ * YearBuilt: Year house was built
+ * CouncilArea: Governing council for the area
+ * Lattitude: Latitude value
+ * Longtitude: Longitude value
+ * Regionname: general region (West, North, etc.)
+ * Propertycount: Number of properties located in the suburb
+
+
+Location of data source:
+
+Melbourne, Australia Housing Market data from January 2016 scraped from publically available results posted every week on Domain.com.au by Tony Pino.
+
+https://www.kaggle.com/anthonypino/melbourne-housing-market#Melbourne_housing_FULL.csv
+
+Released Under CC BY-NC-SA 4.0:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Our team would like to identify the factors which affect home prices, explore trends in the housing market over time, and compare similar house listings in different suburbs to see how location affects sale price in a localized area. With the model we derive here, we hope to provide insight into housing prices and in the future apply our findings to other markets to see if it is possible to find good deals for property purchases where you can get the most value for your money.
+
+***
+
+### Methods
+
+
+##### Data Preparation
+```{r, message = FALSE, warning = FALSE}
+library(readr)
+housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y")))
+
+#Removing the missing data rows
+housing = subset(housing, housing$Price != "NA")
+housing = subset(housing, housing$BuildingArea != "NA")
+housing = subset(housing, housing$YearBuilt != "NA")
+housing = subset(housing, housing$Landsize != "NA")
+nrow(housing)
+
+housing$Type = as.factor(housing$Type)
+
+str(housing)
+```
+ 
+##### Fitting models
+
+Add details here for models.... 4 types of model here additive, quadratic, two way, three way interactions
+```{r}
+price_model_all_add = lm(Price ~ ., data = housing)
+(n = length(resid(price_model_all_add)))
+price_model_quadratic = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing)
+price_model_two_way = lm(Price ~ .^2, data = housing)
+#price_model_three_way = lm(Price ~ .^3, data = housing)
+
+
+```
+
+##### Find influential data points and remove them from the dataset
+
+```{r}
+
+# Finding Leverages
+sum(hatvalues(price_model_all_add) > 2 * mean(hatvalues(price_model_all_add)))
+sum(hatvalues(price_model_quadratic) > 2 * mean(hatvalues(price_model_quadratic)))
+sum(hatvalues(price_model_two_way) > 2 * mean(hatvalues(price_model_two_way)))
+#sum(hatvalues(price_model_three_way) > 2 * mean(hatvalues(price_model_three_way)))
+
+# Finding outliers
+length(rstandard(price_model_all_add)[abs(rstandard(price_model_all_add)) > 2])
+length(rstandard(price_model_quadratic)[abs(rstandard(price_model_quadratic)) > 2])
+length(rstandard(price_model_two_way)[abs(rstandard(price_model_two_way)) > 2])
+#length(rstandard(price_model_three_way)[abs(rstandard(price_model_three_way)) > 2])
+
+# Finding influential data points
+cd_price_model_all_add = cooks.distance(price_model_all_add)
+cd_price_model_quadratic = cooks.distance(price_model_quadratic)
+cd_price_model_two_way = cooks.distance(price_model_two_way)
+#(cd_price_model_three_way = cooks.distance(price_model_three_way))
+
+# Models after removing the influential data points
+price_model_all_add_no_influence = lm(Price ~ ., data = housing,
+                   subset = cd_price_model_all_add < 4 / length(cd_price_model_all_add))
+price_model_quadratic_no_influence = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing,
+                   subset = cd_price_model_quadratic < 4 / length(cd_price_model_quadratic))
+price_model_two_way_no_influence = lm(Price ~ .^2, data = housing,
+                   subset = cd_price_model_two_way < 4 / length(cd_price_model_two_way))
+#price_model_three_way_no_influence = lm(Price ~ .^3, data = housing,
+#                   subset = cd_price_model_three_way < 4 / length(cd_price_model_three_way))
+
+# q-q plots - normality check
+qqnorm(resid(price_model_all_add_no_influence), pch = 20)
+qqline(resid(price_model_all_add_no_influence))
+qqnorm(resid(price_model_quadratic_no_influence), pch = 20)
+qqline(resid(price_model_quadratic_no_influence))
+qqnorm(resid(price_model_two_way_no_influence), pch = 20)
+qqline(resid(price_model_two_way_no_influence))
+#qqnorm(resid(price_model_three_way_no_influence), pch = 20)
+#qqline(resid(price_model_three_way_no_influence))
+
+
+# Fitted vs residuals  - constant variance checks
+plot(fitted(price_model_all_add_no_influence), resid(price_model_all_add_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+plot(fitted(price_model_quadratic_no_influence), resid(price_model_quadratic_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+plot(fitted(price_model_two_way_no_influence), resid(price_model_two_way_no_influence), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+#plot(fitted(price_model_three_way_no_influence), resid(price_model_three_way_no_influence), col = "grey", pch = 20,
+#     xlab = "Fitted", ylab = "Residual",
+#     main = "mtcars: Fitted versus Residuals")
+#abline(h = 0, col = "darkorange", lwd = 2)
+```
+
+
+##### Fitting models
+
+```{r}
+car::vif(price_model_all_add)
+
+# Removed Collinearity and making smaller model
+model_small_add = lm(Price ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
+
+anova(model_small_add, price_model_all_add)
+```
+
+anova notice that using an F-test to compare the two models, we would prefer the smaller model.
+
+##### Apply transformation to the response since values are bigger for Price predictor
+```{r}
+trans_price_model_all_add = lm(log(Price) ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
+
+plot(fitted(trans_price_model_all_add), resid(trans_price_model_all_add), col = "grey", pch = 20,
+     xlab = "Fitted", ylab = "Residual",
+     main = "mtcars: Fitted versus Residuals")
+abline(h = 0, col = "darkorange", lwd = 2)
+
+# q-q plots - normality check
+qqnorm(resid(trans_price_model_all_add), pch = 20)
+qqline(resid(trans_price_model_all_add))
+```
+
+After transformation we get better constant variance
+After transformation we get better normality distribution
+
+##### Finding model using AIC and BIC for additive model
+```{r}
+length(coef(trans_price_model_all_add))
+trans_price_model_all_add_aic = step(trans_price_model_all_add, direction = "backward", trace = 0)
+length(coef(trans_price_model_all_add_aic))
+trans_price_model_all_add_bic = step(trans_price_model_all_add, direction = "backward", trace = 0, k=log(n))
+length(coef(trans_price_model_all_add_bic))
+```
+This also proves that the smaller model is the best model with lesser number of predictors
+
+##### Finding model using AIC and BIC for Quadratic & Two-way Interaction model
+```{r}
+length(coef(price_model_quadratic))
+price_model_quadratic_aic = step(price_model_quadratic, direction = "backward", trace = 0)
+length(coef(price_model_quadratic_aic))
+price_model_quadratic_bic = step(price_model_quadratic, direction = "backward", trace = 0, k=log(n))
+length(coef(price_model_quadratic_bic))
+
+length(coef(price_model_two_way))
+price_model_two_way_aic = step(price_model_two_way, direction = "backward", trace = 0)
+length(coef(price_model_two_way_aic))
+price_model_two_way_bic = step(price_model_two_way, direction = "backward", trace = 0, k=log(n))
+length(coef(price_model_two_way_bic))
+```
+
+BIC of Quadratic Model has the lowest number of predictors i.e. 44. 
+BIC of Two-way interaction model has 158 predictors.
+
+We will choose the BIC quadratic model which has the lowest number of predictors so far.
+
+which is
+lm(formula = Price ~ Rooms + Type + Bathroom + Car + Landsize + 
+    BuildingArea + YearBuilt + CouncilArea + I(Rooms^2) + I(Landsize^2) + 
+    I(BuildingArea^2), data = housing)
+
+***
+
+### Results
+
+***
+
+### Discussion
+
+***
+
+### Appendix
