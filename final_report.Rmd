@@ -272,20 +272,21 @@ sqrt(mean((pred_vals - remaining_test_data$Price)^2))
 
 # check selected forward, backward, and manual models
 library(lmtest)
-run_assumption_analysis = function(model, model_name) {
-  qqnorm(resid(model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
-  qqline(resid(model), col = "dodgerblue", lwd = 2)
-  shapiro.test(resid(model))
+qqnorm(resid(final_log_model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
+qqline(resid(final_log_model), col = "dodgerblue", lwd = 2)
+shapiro.test(resid(final_log_model))
   
-  plot(fitted(model), resid(model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Data from" + model_name)
-  abline(h = 0, col = "darkorange", lwd = 2)
-  bptest(model)
-}
+plot(fitted(final_log_model), resid(final_log_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Log Response Model")
+abline(h = 0, col = "darkorange", lwd = 2)
+bptest(final_log_model)
 
-run_assumption_analysis(final_log_model, "Backward BIC Selected Log Response Model")
-
-run_assumption_analysis(final_nonlog_model, "Backward BIC Selected Non-Log Response Model")
-
+qqnorm(resid(final_nonlog_model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
+qqline(resid(final_nonlog_model), col = "dodgerblue", lwd = 2)
+shapiro.test(resid(final_nonlog_model))
+  
+plot(fitted(final_nonlog_model), resid(final_nonlog_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Non-Log Response Model")
+abline(h = 0, col = "darkorange", lwd = 2)
+bptest(final_nonlog_model)
 ```
 
 ***

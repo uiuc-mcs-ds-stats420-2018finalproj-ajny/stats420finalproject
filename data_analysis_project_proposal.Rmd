@@ -83,15 +83,16 @@ Our team would like to identify the factors which affect home prices, explore tr
 
 ```{r, message = FALSE, warning = FALSE}
 library(readr)
-housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y")))
+housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y"), Distance = col_number(())))
 
 #Removing the missing data rows
-housing = subset(housing, housing$Price != "NA")
-housing = subset(housing, housing$BuildingArea != "NA")
-housing = subset(housing, housing$YearBuilt != "NA")
-housing = subset(housing, housing$Landsize != "NA")
-nrow(housing)
-
+# housing = subset(housing, housing$Price != "NA")
+# housing = subset(housing, housing$BuildingArea != "NA")
+# housing = subset(housing, housing$YearBuilt != "NA")
+# housing = subset(housing, housing$Landsize != "NA")
+# housing = subset(housing, housing$Distance != "NA")
+# nrow(housing)
+housing = na.omit(housing)
 housing$Type = as.factor(housing$Type)
 
 str(housing)
