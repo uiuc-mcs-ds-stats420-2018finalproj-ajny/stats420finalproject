@@ -52,7 +52,7 @@ Below is a brief description of each column in the provided CSV (where each obse
  * Bathroom: # of bathrooms
  * Car: # of spots for cars
  * Landsize: Size of property (land) in meters
- * BuildingArea: Building size in meters
+ * BuildingArea: Building size in sq. meters
  * YearBuilt: Year house was built
  * CouncilArea: Governing council for the area
  * Lattitude: Latitude value
@@ -70,7 +70,7 @@ https://www.kaggle.com/anthonypino/melbourne-housing-market#Melbourne_housing_FU
 Released Under CC BY-NC-SA 4.0:
 https://creativecommons.org/licenses/by-nc-sa/4.0/
 
-Our team would like to identify the factors which affect home prices, explore trends in the housing market over time, and compare similar house listings in different suburbs to see how location affects sale price in a localized area. With the model we derive here, we hope to provide insight into housing prices and in the future apply our findings to other markets to see if it is possible to find good deals for property purchases where you can get the most value for your money.
+Our team would like to identify the factors which affect home prices, explore trends in the housing market over time, and compare similar house listings in different suburbs to see how location affects sale price in a localized area. With the model we derive here, we hope to provide insight into housing prices and in the future apply our findings to other markets to see if it is possible to find good deals for property purchases where you can get the most value for your money. **Our team is primarily interested in achieving the best predictions for housing prices, so accounting for model assumptions is secondary.** 
 
 ***
 
@@ -80,160 +80,213 @@ Our team would like to identify the factors which affect home prices, explore tr
 ##### Data Preparation
 ```{r, message = FALSE, warning = FALSE}
 library(readr)
-housing = read_csv("Melbourne_housing_FULL.csv", na = "NA", col_types = cols(BuildingArea = col_number(), Landsize = col_number(), Price = col_number(), Propertycount = col_number(), Date = col_date(format = "%d/%m/%Y")))
+housing = read_csv("Melbourne_housing_FULL.csv", 
+        col_types = cols(Address = col_skip(), 
+        Bedroom2 = col_skip(), Date = col_skip(), 
+        Lattitude = col_skip(), Longtitude = col_skip(), 
+        Postcode = col_skip(), SellerG = col_skip(), 
+        Suburb = col_skip()), na = "NA")
 
-#Removing the missing data rows
-housing = subset(housing, housing$Price != "NA")
-housing = subset(housing, housing$BuildingArea != "NA")
-housing = subset(housing, housing$YearBuilt != "NA")
-housing = subset(housing, housing$Landsize != "NA")
-nrow(housing)
 
+#housing = housing[!apply(housing[,c(housing$BuildingArea)] == 0, 1, FUN = any, na.rm = TRUE),]
+
+# remove all N/As
+housing = na.omit(housing)
+# Remove zeroes in BuildingArea as that does not make sense (incomplete data)
+housing = housing[housing$BuildingArea > 0, ]
+
+# convert char variables
 housing$Type = as.factor(housing$Type)
+housing$Method = as.factor(housing$Method)
+housing$CouncilArea = as.factor(housing$CouncilArea)
+housing$Regionname = as.factor(housing$Regionname)
+#housing$Suburb = as.factor(housing$Suburb)
 
+# Remove outlier $9 million house
+housing = housing[-c(which.max(housing$Price)), ]
+# Remove property built in 1196 (most likely typo)
+min(housing$YearBuilt)
+housing = housing[-c(which.min(housing$YearBuilt)), ]
+# Remove building area under 10 m^2 (~100 ft.)
+housing = housing[housing$BuildingArea > 10, ]
+# Remove properties with more than 6 car spots
+housing = housing[housing$Car < 6, ]
+
+summary(housing)
 str(housing)
+
+# Too much data to process models in a reasonable amount of time, randomly downsample to 60% of the data
+set.seed(42)
+percent_to_keep = 0.6
+sample_size = floor(percent_to_keep * nrow(housing))
+downsample_idx = sample(nrow(housing), size=sample_size)
+housing = housing[downsample_idx, ]
+
+# 60/40 train/test split of data
+training_percent = 0.6
+housing_trn_idx = sample(nrow(housing), floor(nrow(housing)*training_percent))
+housing_trn = housing[housing_trn_idx, ]
+housing_tst = housing[-housing_trn_idx, ]
 ```
+
+Here we prepare the dataset for model fitting. As there are 21 variables total, we decided to run through them and eliminate the redundant or potentially not as useful ones. We removed `Address`, `Suburb`, `Latitude`, `Longitude`, and `Postcode` as this location information was already encoded in `Distance`, `CouncilArea` and `Regionname` variables. `Seller` would be very localized to Melbourne, so we decided to drop that as well. `Date` (of the sale) could potentially be useful, but for the scope of our project we decided to leave this out as well. `Bedroom2` is highly correlated with `Bedrooms` as it was the number of bedrooms pulled from another data source, so we decided to drop it and just remove any properties that did not have a `Bedrooms` value.
+
+Next, in an attempt to further shrink the dataset size, we removed any observations with missing data in the remaining columns. Then we coerced all character variables into factors. Taking a look at the `summary` output for the remaining observations, we decided to remove some outlier values. There was a $9 million property which was not representative of the rest of the dataset, an apparent typo in a listing with a `YearBuilt` of `1196` (a probable typo), 21 listings with building size of less than 10 meters squared (~100 sq.ft), and 11 listings with more than 6 car spots - all of these observations were removed to clean the data and ease processing.
+
+On our first trial runs to fit models, it took nearly 10 minutes to run the `R` code on the remaining data on our machines, so we made the executive decision to randomly downsample the data to `r percent_to_keep*100`% of the total size before splitting the train/test set to 60%/40% of the remaining data. This cut down the processing time to be more reasonable.
  
 ##### Fitting models
 
-Add details here for models.... 4 types of model here additive, quadratic, two way, three way interactions
 ```{r}
-price_model_all_add = lm(Price ~ ., data = housing)
-(n = length(resid(price_model_all_add)))
-price_model_quadratic = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing)
-price_model_two_way = lm(Price ~ .^2, data = housing)
-#price_model_three_way = lm(Price ~ .^3, data = housing)
+# for ease of calculating LOOCV RMSE
+calc_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+# deal with log response variable
+calc_loocv_rmse_log = function(model) {
+  new_resid = exp(predict(model, newdata=housing_trn))- housing_trn$Price
+  sqrt(mean((new_resid / (1 - hatvalues(model))) ^ 2))
+}
+
+# Here we will perform forward and backwards searches, favoring BIC
+# The goal will be to select a handful of models and compare them with one another
+
+# starting points for forward searches
+n = nrow(housing_trn) # for BIC
+# #1 - start with no predictors, limit search to all predictors (additive)
+start_forward_model_1 = lm(Price ~ 1, data = housing_trn)
+forward_bic_model_1 = step(start_forward_model_1, scope = Price ~ (Rooms + Type + Method + Distance + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + Regionname + Propertycount), direction = "forward", k = log(n), trace = FALSE)
+summary(forward_bic_model_1)
+
+# #2 - start with no predictors, use log of response, limit search to all predictors (additive)
+start_forward_model_2 = lm(log(Price) ~ 1, data = housing_trn)
+forward_bic_model_2 = step(start_forward_model_2, scope = log(Price) ~ (Rooms + Bathroom + Car + Distance + Type + Regionname + Landsize + Method + BuildingArea + YearBuilt), direction = "forward", k = log(n), trace = FALSE)
+summary(forward_bic_model_2)
+
+# #3 - start with no predictors, use log of response, limit search to 2nd-order interactions of all predictors
+start_forward_model_3 = lm(log(Price) ~ 1, data = housing_trn)
+forward_bic_model_3 = step(start_forward_model_3, scope = log(Price) ~ (Rooms + Bathroom + Car + Distance + Type + Regionname + Landsize + Method + BuildingArea + YearBuilt)^2, direction = "forward", k = log(n), trace = FALSE)
+summary(forward_bic_model_3)
 
 
+
+# starting points for backward searches
+# #1 - start with all predictors (additive)
+start_backward_model_1 = lm(Price ~ (.), data = housing_trn)
+backward_bic_model_1 = step(start_backward_model_1, direction = "backward", k = log(n), trace = FALSE)
+summary(backward_bic_model_1)
+
+# #2 - start with all 2nd-order interactions - remove CouncilArea since there are 33 levels to the factor
+start_backward_model_2 = lm(Price ~ (.-CouncilArea)^2, data = housing_trn)
+backward_bic_model_2 = step(start_backward_model_2, direction = "backward", k = log(n), trace = FALSE)
+summary(backward_bic_model_2)
+
+# #3 - add in polynomial terms with 2nd-order interactions- remove CouncilArea since there are 33 levels to the factor
+start_backward_model_3 = lm(Price ~ (.-CouncilArea)^2 + I(Distance^2) + I(Rooms^2) + I(BuildingArea^2) + I(Propertycount^2), data = housing_trn)
+backward_bic_model_3 = step(start_backward_model_3, direction = "backward", k = log(n), trace = FALSE)
+summary(backward_bic_model_3)
+
+# #4 - add in polynomial and log terms with 2nd-order interactions- remove CouncilArea since there are 33 levels to the factor
+start_backward_model_4 = lm(log(Price) ~ (.-CouncilArea)^2 + I(Distance^2) + I(Rooms^2) + I(BuildingArea^2) + I(Propertycount^2), data = housing_trn)
+backward_bic_model_4 = step(start_backward_model_4, direction = "backward", k = log(n), trace = FALSE)
+summary(backward_bic_model_4)
+
+
+# Manually manipulate the search results to see if we can find a better performing model with LOOCV
+
+#Trying some quadratic expressions based on the key predictor [found by human analysis]
+
+manual_model_1 = lm(log(Price) ~ Rooms + Type + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + I(Rooms^2) + I(Landsize^2) + I(BuildingArea^2), data = housing_trn)
+
+manual_model_2 = lm(log(Price) ~ Rooms + Type + Distance + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + Propertycount + I(Propertycount^2) + I(Rooms^2) + I(Distance^2) + I(BuildingArea^2), data = housing_trn)
+
+manual_model_3 = lm(log(Price) ~ log(I(1/Distance)) + Car + Rooms + log(Landsize) + log(Landsize):Rooms + Type + log(I(1/Distance)):Type + Method + log(Landsize):Method + YearBuilt + log(Landsize):YearBuilt, subset = (Distance > 0) & (Landsize > 0), data=housing_trn)
+
+
+# Model selection - pick best forward and backward models
+# forward BIC search model LOOCV RMSE:
+(fw1_loocv = calc_loocv_rmse(forward_bic_model_1))
+(fw2_loocv = calc_loocv_rmse(forward_bic_model_2)) # log response
+(fw3_loocv = calc_loocv_rmse(forward_bic_model_3)) # log response
+
+# backward BIC search model LOOCV RMSE:
+(bw1_loocv = calc_loocv_rmse(backward_bic_model_1))
+(bw2_loocv = calc_loocv_rmse(backward_bic_model_2))
+(bw3_loocv = calc_loocv_rmse(backward_bic_model_3))
+(bw4_loocv = calc_loocv_rmse(backward_bic_model_4)) # log response
+
+# manual tweaking LOOCV RMSE:
+(man1_loocv = calc_loocv_rmse(manual_model_1)) # log response
+(man2_loocv = calc_loocv_rmse(manual_model_2)) # log response
+(man3_loocv = calc_loocv_rmse(manual_model_3)) # log response
+
+# select the best non-log and log transformed response models since they can't be directly
+# compared using LOOCV RMSE (as units are different)
+which.min(c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv))
+final_nonlog_model = backward_bic_model_3
+which.min(c(fw2_loocv, fw3_loocv, bw4_loocv, man1_loocv, man2_loocv, man3_loocv))
+final_log_model = backward_bic_model_4
+
+# Probably not the most 'correct' thing to do, but we will check RMSE to the test data set for both the final models. We can then test the final performance on the non-downsampled data to ensure our final model is verified on separate data.
+
+# log model
+# re-calculate residuals so they're using the same units as the non-log model
+pred_vals = exp(predict(final_log_model, newdata = housing_tst))
+sqrt(mean((pred_vals - housing_tst$Price)^2))
+(avg_pct_error = mean(abs((pred_vals - housing_tst$Price))/housing_tst$Price) * 100)
+# non-log model
+pred_vals2 = predict(final_nonlog_model, newdata = housing_tst)
+sqrt(mean((pred_vals2 - housing_tst$Price)^2))
+(avg_pct_error = mean(abs((pred_vals2 - housing_tst$Price))/housing_tst$Price) * 100)
+
+# plot actual vs. predicted price values with the selected model
+plot(pred_vals ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values", col = "dodgerblue", cex = 1)
+abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
+
+# plot actual vs. predicted price values with the selected model
+plot(pred_vals2 ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values", col = "dodgerblue", cex = 1)
+abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
+
+# We can see that the non-log model predicts 5 houses to have negative prices...one in particular in the negative direction with a property that costs over $2 million, which drastically throws the RMSE off for the model
+pred_vals2[pred_vals2 < 0]
+
+# Thus the final winner is the log model: 
+    # lm(formula = log(Price) ~ Rooms + Type + Method + Distance + 
+    # Bathroom + Car + Landsize + BuildingArea + YearBuilt + Regionname + 
+    # Propertycount + I(Distance^2) + I(BuildingArea^2) + I(Propertycount^2) + 
+    # Rooms:Type + Rooms:Car + Rooms:BuildingArea + Type:Landsize + 
+    # Type:YearBuilt + Distance:Car + Distance:Landsize + Distance:BuildingArea + 
+    # Distance:Regionname + Landsize:BuildingArea + Landsize:Propertycount + 
+    # BuildingArea:YearBuilt + BuildingArea:Regionname + Regionname:Propertycount, 
+    # data = housing_trn)
+
+# Test performance of the log model on the held-out data from down-sampling
+remaining_test_data = housing[-downsample_idx, ]
+pred_vals = exp(predict(final_log_model, newdata = remaining_test_data))
+sqrt(mean((pred_vals - remaining_test_data$Price)^2))
+(avg_pct_error = mean(abs((pred_vals - remaining_test_data$Price))/remaining_test_data$Price) * 100)
 ```
 
-##### Find influential data points and remove them from the dataset
-
 ```{r}
+# This analysis is secondary to the goal of prediciting housing values (vs. explaining), but still worthy of investigating in case we did want to use the model for explanation
 
-# Finding Leverages
-sum(hatvalues(price_model_all_add) > 2 * mean(hatvalues(price_model_all_add)))
-sum(hatvalues(price_model_quadratic) > 2 * mean(hatvalues(price_model_quadratic)))
-sum(hatvalues(price_model_two_way) > 2 * mean(hatvalues(price_model_two_way)))
-#sum(hatvalues(price_model_three_way) > 2 * mean(hatvalues(price_model_three_way)))
+# check selected forward, backward, and manual models
+library(lmtest)
+run_assumption_analysis = function(model, model_name) {
+  qqnorm(resid(model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
+  qqline(resid(model), col = "dodgerblue", lwd = 2)
+  shapiro.test(resid(model))
+  
+  plot(fitted(model), resid(model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Data from" + model_name)
+  abline(h = 0, col = "darkorange", lwd = 2)
+  bptest(model)
+}
 
-# Finding outliers
-length(rstandard(price_model_all_add)[abs(rstandard(price_model_all_add)) > 2])
-length(rstandard(price_model_quadratic)[abs(rstandard(price_model_quadratic)) > 2])
-length(rstandard(price_model_two_way)[abs(rstandard(price_model_two_way)) > 2])
-#length(rstandard(price_model_three_way)[abs(rstandard(price_model_three_way)) > 2])
+run_assumption_analysis(final_log_model, "Backward BIC Selected Log Response Model")
 
-# Finding influential data points
-cd_price_model_all_add = cooks.distance(price_model_all_add)
-cd_price_model_quadratic = cooks.distance(price_model_quadratic)
-cd_price_model_two_way = cooks.distance(price_model_two_way)
-#(cd_price_model_three_way = cooks.distance(price_model_three_way))
+run_assumption_analysis(final_nonlog_model, "Backward BIC Selected Non-Log Response Model")
 
-# Models after removing the influential data points
-price_model_all_add_no_influence = lm(Price ~ ., data = housing,
-                   subset = cd_price_model_all_add < 4 / length(cd_price_model_all_add))
-price_model_quadratic_no_influence = lm(Price ~ . + I(Rooms ^ 2) + I(Landsize ^ 2) + I(BuildingArea^2), data = housing,
-                   subset = cd_price_model_quadratic < 4 / length(cd_price_model_quadratic))
-price_model_two_way_no_influence = lm(Price ~ .^2, data = housing,
-                   subset = cd_price_model_two_way < 4 / length(cd_price_model_two_way))
-#price_model_three_way_no_influence = lm(Price ~ .^3, data = housing,
-#                   subset = cd_price_model_three_way < 4 / length(cd_price_model_three_way))
-
-# q-q plots - normality check
-qqnorm(resid(price_model_all_add_no_influence), pch = 20)
-qqline(resid(price_model_all_add_no_influence))
-qqnorm(resid(price_model_quadratic_no_influence), pch = 20)
-qqline(resid(price_model_quadratic_no_influence))
-qqnorm(resid(price_model_two_way_no_influence), pch = 20)
-qqline(resid(price_model_two_way_no_influence))
-#qqnorm(resid(price_model_three_way_no_influence), pch = 20)
-#qqline(resid(price_model_three_way_no_influence))
-
-
-# Fitted vs residuals  - constant variance checks
-plot(fitted(price_model_all_add_no_influence), resid(price_model_all_add_no_influence), col = "grey", pch = 20,
-     xlab = "Fitted", ylab = "Residual",
-     main = "mtcars: Fitted versus Residuals")
-abline(h = 0, col = "darkorange", lwd = 2)
-plot(fitted(price_model_quadratic_no_influence), resid(price_model_quadratic_no_influence), col = "grey", pch = 20,
-     xlab = "Fitted", ylab = "Residual",
-     main = "mtcars: Fitted versus Residuals")
-abline(h = 0, col = "darkorange", lwd = 2)
-plot(fitted(price_model_two_way_no_influence), resid(price_model_two_way_no_influence), col = "grey", pch = 20,
-     xlab = "Fitted", ylab = "Residual",
-     main = "mtcars: Fitted versus Residuals")
-abline(h = 0, col = "darkorange", lwd = 2)
-#plot(fitted(price_model_three_way_no_influence), resid(price_model_three_way_no_influence), col = "grey", pch = 20,
-#     xlab = "Fitted", ylab = "Residual",
-#     main = "mtcars: Fitted versus Residuals")
-#abline(h = 0, col = "darkorange", lwd = 2)
 ```
-
-
-##### Fitting models
-
-```{r}
-car::vif(price_model_all_add)
-
-# Removed Collinearity and making smaller model
-model_small_add = lm(Price ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
-
-anova(model_small_add, price_model_all_add)
-```
-
-anova notice that using an F-test to compare the two models, we would prefer the smaller model.
-
-##### Apply transformation to the response since values are bigger for Price predictor
-```{r}
-trans_price_model_all_add = lm(log(Price) ~ Rooms + Type + Method + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea, data = housing)
-
-plot(fitted(trans_price_model_all_add), resid(trans_price_model_all_add), col = "grey", pch = 20,
-     xlab = "Fitted", ylab = "Residual",
-     main = "mtcars: Fitted versus Residuals")
-abline(h = 0, col = "darkorange", lwd = 2)
-
-# q-q plots - normality check
-qqnorm(resid(trans_price_model_all_add), pch = 20)
-qqline(resid(trans_price_model_all_add))
-```
-
-After transformation we get better constant variance
-After transformation we get better normality distribution
-
-##### Finding model using AIC and BIC for additive model
-```{r}
-length(coef(trans_price_model_all_add))
-trans_price_model_all_add_aic = step(trans_price_model_all_add, direction = "backward", trace = 0)
-length(coef(trans_price_model_all_add_aic))
-trans_price_model_all_add_bic = step(trans_price_model_all_add, direction = "backward", trace = 0, k=log(n))
-length(coef(trans_price_model_all_add_bic))
-```
-This also proves that the smaller model is the best model with lesser number of predictors
-
-##### Finding model using AIC and BIC for Quadratic & Two-way Interaction model
-```{r}
-length(coef(price_model_quadratic))
-price_model_quadratic_aic = step(price_model_quadratic, direction = "backward", trace = 0)
-length(coef(price_model_quadratic_aic))
-price_model_quadratic_bic = step(price_model_quadratic, direction = "backward", trace = 0, k=log(n))
-length(coef(price_model_quadratic_bic))
-
-length(coef(price_model_two_way))
-price_model_two_way_aic = step(price_model_two_way, direction = "backward", trace = 0)
-length(coef(price_model_two_way_aic))
-price_model_two_way_bic = step(price_model_two_way, direction = "backward", trace = 0, k=log(n))
-length(coef(price_model_two_way_bic))
-```
-
-BIC of Quadratic Model has the lowest number of predictors i.e. 44. 
-BIC of Two-way interaction model has 158 predictors.
-
-We will choose the BIC quadratic model which has the lowest number of predictors so far.
-
-which is
-lm(formula = Price ~ Rooms + Type + Bathroom + Car + Landsize + 
-    BuildingArea + YearBuilt + CouncilArea + I(Rooms^2) + I(Landsize^2) + 
-    I(BuildingArea^2), data = housing)
 
 ***
 
@@ -242,6 +295,26 @@ lm(formula = Price ~ Rooms + Type + Bathroom + Car + Landsize +
 ***
 
 ### Discussion
+
+After performing various search methods (forward and backwards BIC with multiple linear regression, dummy variables, interaction, transformations, and pol, along with )
+```{r}
+library(ggplot2)
+library(ggmap)
+
+# original data set
+melbourn_housing <- read_csv("Melbourne_housing_FULL_column.csv", na = "NA")
+melbourn_housing <- na.omit(melbourn_housing)
+melbourn_map <- get_map(location = "melbourne", maptype = "watercolor", zoom = 11)
+ggmap(melbourn_map) + geom_point(
+  aes(x = Longtitude, y = Lattitude),
+  colour = "red",
+  alpha = 0.1,
+  size = 2,
+  data = melbourn_housing
+  )
+# training set
+# test set
+```
 
 ***
 
