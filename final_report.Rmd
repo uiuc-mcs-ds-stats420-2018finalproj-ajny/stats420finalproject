@@ -252,11 +252,10 @@ summary(backward_bic_model_4)
 
 ```{r}
 options(scipen=999)
-model_data = data.frame(row_labels=c("Forward Search 1", "Forward Search 2", "Forward Search 3", "Backward Search 1", "Backward Search 2", "Backward Search 3*", "Backward Search 4*", "Manual Selection 1", "Manual Selection 2", "Manual Selection 3", "Manual Selection 4"),
+model_data = data.frame(row_labels=c("Forward Search 1", "Backward Search 1", "Backward Search 2", "Backward Search 3*", "Manual Selection 4", "Forward Search 2", "Forward Search 3", "Backward Search 4*", "Manual Selection 1", "Manual Selection 2", "Manual Selection 3"),
 loocv_RMSE = c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv, man4_loocv, fw2_loocv, fw3_loocv, bw4_loocv, man1_loocv, man2_loocv, man3_loocv))
 library(knitr)
 kable(model_data, format = "markdown", col.names = c("Models", "Train LOOCV RMSE"))
-options(scipen=0)
 ```
  - Above we see the LOOCV RMSE values using the training dataset, along with the two models selected for final comparison - the lowest non-long LOOCV RMSE model, and the lowest log-response LOOCV RMSE model, as they cannot be directly compared in that fashion. After further checks on the test data described in the `Methods` section, we determined the final model to be:
  
@@ -348,7 +347,7 @@ ggmap(melbourn_map) + geom_point(
   ) + colScale + guides(colour = guide_legend(override.aes = list(alpha = 1)))
 ```
  
- - In regards to generalizing this model to other markets, `Regionname` would probably have to be recreated, and may end up behaving differently depending how the area splits up their regions. Measurement units would also need to be standardized if a US market was used, as SI units were used in this dataset. Below the latitude and longitude of all of the properties from the data set are plotted on top of a map of Melbourne - not every city would be able to be broken up as such (especially being a port next to the ocean), so this model may not generalize very well, but the methods could be followed for any similar datasets.
+ - In regards to generalizing this model to other markets, `Regionname` would probably have to be recreated, and may end up behaving differently depending how the area splits up their regions. Measurement units would also need to be standardized if a US market was used, as SI units were used in this dataset. Above the latitude and longitude of all of the properties from the data set are plotted on top of a map of Melbourne - not every city would be able to be broken up as such (especially being a port next to the ocean), so this model may not generalize very well, but the methods could be followed for any similar datasets.
  
 ***
 
