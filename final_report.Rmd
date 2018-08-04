@@ -87,9 +87,6 @@ housing = read_csv("Melbourne_housing_FULL.csv",
         Postcode = col_skip(), SellerG = col_skip(), 
         Suburb = col_skip()), na = "NA")
 
-
-#housing = housing[!apply(housing[,c(housing$BuildingArea)] == 0, 1, FUN = any, na.rm = TRUE),]
-
 # remove all N/As
 housing = na.omit(housing)
 # Remove zeroes in BuildingArea as that does not make sense (incomplete data)
@@ -129,11 +126,11 @@ housing_trn = housing[housing_trn_idx, ]
 housing_tst = housing[-housing_trn_idx, ]
 ```
 
-Here we prepare the dataset for model fitting. As there are 21 variables total, we decided to run through them and eliminate the redundant or potentially not as useful ones. We removed `Address`, `Suburb`, `Latitude`, `Longitude`, and `Postcode` as this location information was already encoded in `Distance`, `CouncilArea` and `Regionname` variables. `Seller` would be very localized to Melbourne, so we decided to drop that as well. `Date` (of the sale) could potentially be useful, but for the scope of our project we decided to leave this out as well. `Bedroom2` is highly correlated with `Bedrooms` as it was the number of bedrooms pulled from another data source, so we decided to drop it and just remove any properties that did not have a `Bedrooms` value.
+ - Here we prepare the dataset for model fitting. As there are 21 variables total, we decided to run through them and eliminate the redundant or potentially not as useful ones. We removed `Address`, `Suburb`, `Latitude`, `Longitude`, and `Postcode` as this location information was already encoded in `Distance`, `CouncilArea` and `Regionname` variables. `Seller` would be very localized to Melbourne, so we decided to drop that as well. `Date` (of the sale) could potentially be useful, but for the scope of our project we decided to leave this out as well. `Bedroom2` is highly correlated with `Bedrooms` as it was the number of bedrooms pulled from another data source, so we decided to drop it and just remove any properties that did not have a `Bedrooms` value.
 
-Next, in an attempt to further shrink the dataset size, we removed any observations with missing data in the remaining columns. Then we coerced all character variables into factors. Taking a look at the `summary` output for the remaining observations, we decided to remove some outlier values. There was a $9 million property which was not representative of the rest of the dataset, an apparent typo in a listing with a `YearBuilt` of `1196` (a probable typo), 21 listings with building size of less than 10 meters squared (~100 sq.ft), and 11 listings with more than 6 car spots - all of these observations were removed to clean the data and ease processing.
+ - Next, in an attempt to further shrink the dataset size, we removed any observations with missing data in the remaining columns. Then we coerced all character variables into factors. Taking a look at the `summary` output for the remaining observations, we decided to remove some outlier values. There was a $9 million property which was not representative of the rest of the dataset, an apparent typo in a listing with a `YearBuilt` of `1196` (a probable typo), 21 listings with building size of less than 10 meters squared (~100 sq.ft), and 11 listings with more than 6 car spots - all of these observations were removed to clean the data and ease processing.
 
-On our first trial runs to fit models, it took nearly 10 minutes to run the `R` code on the remaining data on our machines, so we made the executive decision to randomly downsample the data to `r percent_to_keep*100`% of the total size before splitting the train/test set to 60%/40% of the remaining data. This cut down the processing time to be more reasonable.
+ - On our first trial runs to fit models, it took nearly 10 minutes to run the `R` code on the remaining data on our machines, so we made the executive decision to randomly downsample the data to `r percent_to_keep*100`% of the total size before splitting the train/test set to 60%/40% of the remaining data. This cut down the processing time to be more reasonable.
  
 ##### Fitting models
 
@@ -142,54 +139,41 @@ On our first trial runs to fit models, it took nearly 10 minutes to run the `R` 
 calc_loocv_rmse = function(model) {
   sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
 }
-# deal with log response variable
-calc_loocv_rmse_log = function(model) {
-  new_resid = exp(predict(model, newdata=housing_trn))- housing_trn$Price
-  sqrt(mean((new_resid / (1 - hatvalues(model))) ^ 2))
-}
 
 # Here we will perform forward and backwards searches, favoring BIC
-# The goal will be to select a handful of models and compare them with one another
+# The goal will be to generate a handful of models and compare them with one another
 
 # starting points for forward searches
 n = nrow(housing_trn) # for BIC
 # #1 - start with no predictors, limit search to all predictors (additive)
 start_forward_model_1 = lm(Price ~ 1, data = housing_trn)
 forward_bic_model_1 = step(start_forward_model_1, scope = Price ~ (Rooms + Type + Method + Distance + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + Regionname + Propertycount), direction = "forward", k = log(n), trace = FALSE)
-summary(forward_bic_model_1)
 
 # #2 - start with no predictors, use log of response, limit search to all predictors (additive)
 start_forward_model_2 = lm(log(Price) ~ 1, data = housing_trn)
 forward_bic_model_2 = step(start_forward_model_2, scope = log(Price) ~ (Rooms + Bathroom + Car + Distance + Type + Regionname + Landsize + Method + BuildingArea + YearBuilt), direction = "forward", k = log(n), trace = FALSE)
-summary(forward_bic_model_2)
 
 # #3 - start with no predictors, use log of response, limit search to 2nd-order interactions of all predictors
 start_forward_model_3 = lm(log(Price) ~ 1, data = housing_trn)
 forward_bic_model_3 = step(start_forward_model_3, scope = log(Price) ~ (Rooms + Bathroom + Car + Distance + Type + Regionname + Landsize + Method + BuildingArea + YearBuilt)^2, direction = "forward", k = log(n), trace = FALSE)
-summary(forward_bic_model_3)
-
 
 
 # starting points for backward searches
 # #1 - start with all predictors (additive)
 start_backward_model_1 = lm(Price ~ (.), data = housing_trn)
 backward_bic_model_1 = step(start_backward_model_1, direction = "backward", k = log(n), trace = FALSE)
-summary(backward_bic_model_1)
 
 # #2 - start with all 2nd-order interactions - remove CouncilArea since there are 33 levels to the factor
 start_backward_model_2 = lm(Price ~ (.-CouncilArea)^2, data = housing_trn)
 backward_bic_model_2 = step(start_backward_model_2, direction = "backward", k = log(n), trace = FALSE)
-summary(backward_bic_model_2)
 
 # #3 - add in polynomial terms with 2nd-order interactions- remove CouncilArea since there are 33 levels to the factor
 start_backward_model_3 = lm(Price ~ (.-CouncilArea)^2 + I(Distance^2) + I(Rooms^2) + I(BuildingArea^2) + I(Propertycount^2), data = housing_trn)
 backward_bic_model_3 = step(start_backward_model_3, direction = "backward", k = log(n), trace = FALSE)
-summary(backward_bic_model_3)
 
 # #4 - add in polynomial and log terms with 2nd-order interactions- remove CouncilArea since there are 33 levels to the factor
 start_backward_model_4 = lm(log(Price) ~ (.-CouncilArea)^2 + I(Distance^2) + I(Rooms^2) + I(BuildingArea^2) + I(Propertycount^2), data = housing_trn)
 backward_bic_model_4 = step(start_backward_model_4, direction = "backward", k = log(n), trace = FALSE)
-summary(backward_bic_model_4)
 
 
 # Manually manipulate the search results to see if we can find a better performing model with LOOCV
@@ -200,7 +184,9 @@ manual_model_1 = lm(log(Price) ~ Rooms + Type + Bathroom + Car + Landsize + Buil
 
 manual_model_2 = lm(log(Price) ~ Rooms + Type + Distance + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + Propertycount + I(Propertycount^2) + I(Rooms^2) + I(Distance^2) + I(BuildingArea^2), data = housing_trn)
 
-manual_model_3 = lm(log(Price) ~ log(I(1/Distance)) + Car + Rooms + log(Landsize) + log(Landsize):Rooms + Type + log(I(1/Distance)):Type + Method + log(Landsize):Method + YearBuilt + log(Landsize):YearBuilt, subset = (Distance > 0) & (Landsize > 0), data=housing_trn)
+manual_model_3 = lm(log(Price) ~ log(I(1/Distance)) + Car + Rooms + log(Landsize) + log(Landsize):Rooms + Type + log(I(1/Distance)):Type + Method + log(Landsize):Method + YearBuilt + log(Landsize):YearBuilt, subset = (Distance > 0) & (Landsize > 0), data = housing_trn)
+
+manual_model_4 = lm(formula = Price ~ Rooms + Type + Bathroom + Car + Landsize + BuildingArea + YearBuilt + CouncilArea + I(Rooms^2) + I(Landsize^2) + I(BuildingArea^2), data = housing_trn)
 
 
 # Model selection - pick best forward and backward models
@@ -219,11 +205,13 @@ manual_model_3 = lm(log(Price) ~ log(I(1/Distance)) + Car + Rooms + log(Landsize
 (man1_loocv = calc_loocv_rmse(manual_model_1)) # log response
 (man2_loocv = calc_loocv_rmse(manual_model_2)) # log response
 (man3_loocv = calc_loocv_rmse(manual_model_3)) # log response
+(man4_loocv = calc_loocv_rmse(manual_model_4))
 
 # select the best non-log and log transformed response models since they can't be directly
 # compared using LOOCV RMSE (as units are different)
-which.min(c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv))
+which.min(c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv, man4_loocv))
 final_nonlog_model = backward_bic_model_3
+
 which.min(c(fw2_loocv, fw3_loocv, bw4_loocv, man1_loocv, man2_loocv, man3_loocv))
 final_log_model = backward_bic_model_4
 
@@ -232,22 +220,16 @@ final_log_model = backward_bic_model_4
 # log model
 # re-calculate residuals so they're using the same units as the non-log model
 pred_vals = exp(predict(final_log_model, newdata = housing_tst))
-sqrt(mean((pred_vals - housing_tst$Price)^2))
+(final_model_RMSE =sqrt(mean((pred_vals - housing_tst$Price)^2)))
 (avg_pct_error = mean(abs((pred_vals - housing_tst$Price))/housing_tst$Price) * 100)
+
 # non-log model
 pred_vals2 = predict(final_nonlog_model, newdata = housing_tst)
-sqrt(mean((pred_vals2 - housing_tst$Price)^2))
+(nonlog_model_RMSE = sqrt(mean((pred_vals2 - housing_tst$Price)^2)))
 (avg_pct_error = mean(abs((pred_vals2 - housing_tst$Price))/housing_tst$Price) * 100)
 
-# plot actual vs. predicted price values with the selected model
-plot(pred_vals ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values", col = "dodgerblue", cex = 1)
-abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
 
-# plot actual vs. predicted price values with the selected model
-plot(pred_vals2 ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values", col = "dodgerblue", cex = 1)
-abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
-
-# We can see that the non-log model predicts 5 houses to have negative prices...one in particular in the negative direction with a property that costs over $2 million, which drastically throws the RMSE off for the model
+# The non-log model predicts 5 houses to have negative prices...one in particular in the negative direction with a property that costs over $2 million, which drastically throws the RMSE off for the model
 pred_vals2[pred_vals2 < 0]
 
 # Thus the final winner is the log model: 
@@ -260,63 +242,128 @@ pred_vals2[pred_vals2 < 0]
     # BuildingArea:YearBuilt + BuildingArea:Regionname + Regionname:Propertycount, 
     # data = housing_trn)
 
-# Test performance of the log model on the held-out data from down-sampling
-remaining_test_data = housing[-downsample_idx, ]
-pred_vals = exp(predict(final_log_model, newdata = remaining_test_data))
-sqrt(mean((pred_vals - remaining_test_data$Price)^2))
-(avg_pct_error = mean(abs((pred_vals - remaining_test_data$Price))/remaining_test_data$Price) * 100)
-```
-
-```{r}
-# This analysis is secondary to the goal of prediciting housing values (vs. explaining), but still worthy of investigating in case we did want to use the model for explanation
-
-# check selected forward, backward, and manual models
-library(lmtest)
-qqnorm(resid(final_log_model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
-qqline(resid(final_log_model), col = "dodgerblue", lwd = 2)
-shapiro.test(resid(final_log_model))
-  
-plot(fitted(final_log_model), resid(final_log_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Log Response Model")
-abline(h = 0, col = "darkorange", lwd = 2)
-bptest(final_log_model)
-
-qqnorm(resid(final_nonlog_model), main = "Normal Q-Q Plot, fit_1", col = "darkgrey")
-qqline(resid(final_nonlog_model), col = "dodgerblue", lwd = 2)
-shapiro.test(resid(final_nonlog_model))
-  
-plot(fitted(final_nonlog_model), resid(final_nonlog_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Non-Log Response Model")
-abline(h = 0, col = "darkorange", lwd = 2)
-bptest(final_nonlog_model)
+# Checking the summary output for the winning model, we don't see any immediate non-factor interactions or variables that look like good candidates for removal (the non-significant coefficients are interactions with various dummy variables for factors that have other significant relationships with the response)
+summary(backward_bic_model_4)
 ```
 
 ***
 
 ### Results
 
+```{r}
+options(scipen=999)
+model_data = data.frame(row_labels=c("Forward Search 1", "Forward Search 2", "Forward Search 3", "Backward Search 1", "Backward Search 2", "Backward Search 3*", "Backward Search 4*", "Manual Selection 1", "Manual Selection 2", "Manual Selection 3", "Manual Selection 4"),
+loocv_RMSE = c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv, man4_loocv, fw2_loocv, fw3_loocv, bw4_loocv, man1_loocv, man2_loocv, man3_loocv))
+library(knitr)
+kable(model_data, format = "markdown", col.names = c("Models", "Train LOOCV RMSE"))
+options(scipen=0)
+```
+ - Above we see the LOOCV RMSE values using the training dataset, along with the two models selected for final comparison - the lowest non-long LOOCV RMSE model, and the lowest log-response LOOCV RMSE model, as they cannot be directly compared in that fashion. After further checks on the test data described in the `Methods` section, we determined the final model to be:
+ 
+ - Selected model: **lm(formula = log(Price) ~ Rooms + Type + Method + Distance + Bathroom + Car + Landsize + BuildingArea + YearBuilt + Regionname + Propertycount + I(Distance^2) + I(BuildingArea^2) + I(Propertycount^2) + Rooms:Type + Rooms:Car + Rooms:BuildingArea + Type:Landsize + Type:YearBuilt + Distance:Car + Distance:Landsize + Distance:BuildingArea + Distance:Regionname + Landsize:BuildingArea + Landsize:Propertycount + BuildingArea:YearBuilt + BuildingArea:Regionname + Regionname:Propertycount, data = housing_trn)**
+
+```{r}
+# plot actual vs. predicted price values with the selected model
+plot(pred_vals ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Selected Log Model)", col = "dodgerblue", cex = 1)
+abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
+
+# plot actual vs. predicted price values with the non-log alternate model
+plot(pred_vals2 ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Non-log Model)", col = "dodgerblue", cex = 1)
+abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
+```
+ 
+ - Here we see the two Actual vs. Predicted price plots of the final two models in contention. While both plots seem to follow the general trend of the test data, we see the one outlier negative price prediction from the log model which greatly affected the RMSE of that model on the test data. As a price should never be negative (unless somehow you paid someone to take a property off your hands...), this hints at a flaw in the non-log response model. Thus we can be more confident in the log-response model as we do not see any negative prices (nor would be expect any). The final RMSE of the selected model is `r final_model_RMSE`.
+
+```{r}
+# This analysis is secondary to the goal of prediciting housing values (vs. explaining), but still worthy of investigating in case we did want to use the model for explanation
+
+# check the final two selected models (one log-response, other non-log)
+library(lmtest)
+qqnorm(resid(final_nonlog_model), main = "Normal Q-Q Plot, Final Non-Log Price Model", col = "darkgrey")
+qqline(resid(final_nonlog_model), col = "dodgerblue", lwd = 2)
+shapiro.test(resid(final_nonlog_model))
+  
+plot(fitted(final_nonlog_model), resid(final_nonlog_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Non-Log Response Model")
+abline(h = 0, col = "darkorange", lwd = 2)
+bptest(final_nonlog_model)
+
+qqnorm(resid(final_log_model), main = "Normal Q-Q Plot, Final Log Price Model", col = "darkgrey")
+qqline(resid(final_log_model), col = "dodgerblue", lwd = 2)
+shapiro.test(resid(final_log_model))
+  
+plot(fitted(final_log_model), resid(final_log_model), col = "grey", pch = 20, xlab = "Fitted", ylab = "Residuals", main = "Backward BIC Selected Log Response Model")
+abline(h = 0, col = "darkorange", lwd = 2)
+bptest(final_log_model)
+```
+
+ - We can see that the log-response model has a much better looking Normal Q-Q plot and Fitted vs. Residuals plot (though both still fail the Shapiro and Breusch-Pagan tests....which is ok if we are just using the model for prediction). This gives us even more confidence that the log model was the correct choice between the final two for prediction of housing prices, but it would be quite difficult (if not flawed) to use this model for explanation of relationships between predictors and the price response.
+
+```{r}
+# Test performance of the log model on the held-out data from down-sampling
+remaining_test_data = housing[-downsample_idx, ]
+pred_vals = exp(predict(final_log_model, newdata = remaining_test_data))
+final_data_RMSE = sqrt(mean((pred_vals - remaining_test_data$Price)^2))
+(avg_pct_error2 = mean(abs((pred_vals - remaining_test_data$Price))/remaining_test_data$Price) * 100)
+
+model_data2 = data.frame(row_labels=c("Final model"),
+final_RMSE = c(final_data_RMSE),
+final_avg_pct_error = c(avg_pct_error2))
+kable(model_data2, format = "markdown", col.names = c("Models", "Test LOOCV RMSE", "Avg % Error"))
+```
+ 
+ - As it is frowned upon to compare models (and make a selection between two) based on the test set, we decided to use the data we took out through downsampling and calculated the RMSE on this un-used data. The table above displays the final results of our selected model on this 'second' test set.
+
+
 ***
 
 ### Discussion
 
-After performing various search methods (forward and backwards BIC with multiple linear regression, dummy variables, interaction, transformations, and pol, along with )
-```{r}
+ - After utilizing several regression methods (forward and backwards search with multiple linear regression, dummy variables, interaction, transformations, and polynomials), along with model selection methods such as BIC and training set LOOCV RMSE, we arrived at our final model. Using several starting points for both forward and backwards search, along with using some manually manipulated selection of predictors (based off of the search results), we then compared all the resulting models with one another using LOOCV RMSE. We picked the lowest  `log(Price)` model LOOCV RMSE and the lowest non-log response model LOOCV RMSE, and as we could not directly compare these two RMSE (different units), we had to examine further selection criteria. We used the test set RMSE values of the two models, and selected the final log-response model as it had a significantly lower RMSE (and also better model assumption plots, though still not ideal for using the model for explanation).
+ 
+ - As we can see with `r length(coef(final_log_model))` coefficients in the model, it is quite complex. But as our stated goal was to *predict* housing prices, we feel that having a model which we can't use to make conclusions about relationships of predictors to the response is an acceptable tradeoff to increase price prediction accuracy. 
+ 
+ - From the data is seems like the higher the price gets, the more variable the relationships with the predictors becomes. We can see that the model performs decently for the first half of the data (up to ~\$3 million) but seems to overestimate prices above that level. In the real world, we would be most confident using this model to predict prices below $2 million. In fact removing data above $3 million and performing the above analysis again would probably be a worthy endeavour to decrease the RMSE of the model.
+
+```{r message=FALSE, warning=FALSE}
 library(ggplot2)
 library(ggmap)
 
 # original data set
-melbourn_housing <- read_csv("Melbourne_housing_FULL_column.csv", na = "NA")
-melbourn_housing <- na.omit(melbourn_housing)
-melbourn_map <- get_map(location = "melbourne", maptype = "watercolor", zoom = 11)
+ melbourn_housing = read_csv("Melbourne_housing_FULL.csv", na = "NA")
+ melbourn_housing = na.omit(melbourn_housing)
+ melbourn_housing$Regionname = as.factor(melbourn_housing$Regionname)
+
+# set color scale
+library(RColorBrewer)
+myColors = brewer.pal(8,"Set1")
+names(myColors) = levels(melbourn_housing$Regionname)
+colScale = scale_colour_manual(name = "Region",values = myColors)
+
+melbourn_map = get_map(location = "melbourne", maptype = "watercolor", zoom = 9)
 ggmap(melbourn_map) + geom_point(
-  aes(x = Longtitude, y = Lattitude),
-  colour = "red",
-  alpha = 0.1,
+  aes(x = Longtitude, y = Lattitude, colour = Regionname),
+  alpha = 0.4,
   size = 2,
   data = melbourn_housing
-  )
-# training set
-# test set
+  ) + colScale + guides(colour = guide_legend(override.aes = list(alpha = 1)))
 ```
-
+ 
+ - In regards to generalizing this model to other markets, `Regionname` would probably have to be recreated, and may end up behaving differently depending how the area splits up their regions. Measurement units would also need to be standardized if a US market was used, as SI units were used in this dataset. Below the latitude and longitude of all of the properties from the data set are plotted on top of a map of Melbourne - not every city would be able to be broken up as such (especially being a port next to the ocean), so this model may not generalize very well, but the methods could be followed for any similar datasets.
+ 
 ***
 
 ### Appendix
+```{r}
+# Summary output of all models compared before final selection:
+summary(forward_bic_model_1)
+summary(forward_bic_model_2)
+summary(forward_bic_model_3)
+summary(backward_bic_model_1)
+summary(backward_bic_model_2)
+summary(backward_bic_model_3)
+summary(backward_bic_model_4)
+summary(manual_model_1)
+summary(manual_model_2)
+summary(manual_model_3)
+```
+
