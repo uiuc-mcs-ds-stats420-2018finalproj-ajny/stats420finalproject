@@ -704,12 +704,12 @@ final_data_RMSE = sqrt(mean((pred_vals - remaining_test_data$Price)^2))
 <pre class="r"><code>model_data2 = data.frame(row_labels=c(&quot;Final model&quot;),
 final_RMSE = c(final_data_RMSE),
 final_avg_pct_error = c(avg_pct_error2))
-kable(model_data2, format = &quot;markdown&quot;, col.names = c(&quot;Models&quot;, &quot;Test LOOCV RMSE&quot;, &quot;Avg % Error&quot;))</code></pre>
+kable(model_data2, format = &quot;markdown&quot;, col.names = c(&quot;Models&quot;, &quot;Hold-out RMSE&quot;, &quot;Avg % Error&quot;))</code></pre>
 <table>
 <thead>
 <tr class="header">
 <th align="left">Models</th>
-<th align="right">Test LOOCV RMSE</th>
+<th align="right">Hold-out RMSE</th>
 <th align="right">Avg % Error</th>
 </tr>
 </thead>

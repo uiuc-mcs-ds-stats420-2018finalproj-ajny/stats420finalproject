@@ -307,7 +307,7 @@ final_data_RMSE = sqrt(mean((pred_vals - remaining_test_data$Price)^2))
 model_data2 = data.frame(row_labels=c("Final model"),
 final_RMSE = c(final_data_RMSE),
 final_avg_pct_error = c(avg_pct_error2))
-kable(model_data2, format = "markdown", col.names = c("Models", "Test LOOCV RMSE", "Avg % Error"))
+kable(model_data2, format = "markdown", col.names = c("Models", "Hold-out RMSE", "Avg % Error"))
 ```
  
  - As it is frowned upon to compare models (and make a selection between two) based on the test set, we decided to use the data we took out through downsampling and calculated the RMSE on this un-used data. The table above displays the final results of our selected model on this 'second' test set.
