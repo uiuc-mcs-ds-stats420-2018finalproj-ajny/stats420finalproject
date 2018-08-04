@@ -130,7 +130,7 @@ housing_tst = housing[-housing_trn_idx, ]
 
  - Next, in an attempt to further shrink the dataset size, we removed any observations with missing data in the remaining columns. Then we coerced all character variables into factors. Taking a look at the `summary` output for the remaining observations, we decided to remove some outlier values. There was a $9 million property which was not representative of the rest of the dataset, an apparent typo in a listing with a `YearBuilt` of `1196` (a probable typo), 21 listings with building size of less than 10 meters squared (~100 sq.ft), and 11 listings with more than 6 car spots - all of these observations were removed to clean the data and ease processing.
 
- - On our first trial runs to fit models, it took nearly 10 minutes to run the `R` code on the remaining data on our machines, so we made the executive decision to randomly downsample the data to `r percent_to_keep*100`% of the total size before splitting the train/test set to 60%/40% of the remaining data. This cut down the processing time to be more reasonable.
+ - On our first trial runs to fit models, it took over 10 minutes to run the `R` code on the remaining data on our machines, so we made the executive decision to randomly downsample the data to `r percent_to_keep*100`% of the total size before splitting the train/test set to 60%/40% of the remaining data. This cut down the processing time to be more reasonable.
  
 ##### Fitting models
 
@@ -215,24 +215,24 @@ final_nonlog_model = backward_bic_model_3
 which.min(c(fw2_loocv, fw3_loocv, bw4_loocv, man1_loocv, man2_loocv, man3_loocv))
 final_log_model = backward_bic_model_4
 
-# Probably not the most 'correct' thing to do, but we will check RMSE to the test data set for both the final models. We can then test the final performance on the non-downsampled data to ensure our final model is verified on separate data.
+# Compare using base RMSE on training set for the log and non-log models
 
 # log model
 # re-calculate residuals so they're using the same units as the non-log model
-pred_vals = exp(predict(final_log_model, newdata = housing_tst))
-(final_model_RMSE =sqrt(mean((pred_vals - housing_tst$Price)^2)))
-(avg_pct_error = mean(abs((pred_vals - housing_tst$Price))/housing_tst$Price) * 100)
+pred_vals = exp(predict(final_log_model, newdata = housing_trn))
+(final_model_RMSE = sqrt(mean((pred_vals - housing_trn$Price)^2)))
+(avg_pct_error1 = mean(abs((pred_vals - housing_trn$Price))/housing_trn$Price) * 100)
 
 # non-log model
-pred_vals2 = predict(final_nonlog_model, newdata = housing_tst)
-(nonlog_model_RMSE = sqrt(mean((pred_vals2 - housing_tst$Price)^2)))
-(avg_pct_error = mean(abs((pred_vals2 - housing_tst$Price))/housing_tst$Price) * 100)
+pred_vals2 = predict(final_nonlog_model, newdata = housing_trn)
+(nonlog_model_RMSE = sqrt(mean((pred_vals2 - housing_trn$Price)^2)))
+(avg_pct_error2 = mean(abs((pred_vals2 - housing_trn$Price))/housing_trn$Price) * 100)
 
 
-# The non-log model predicts 5 houses to have negative prices...one in particular in the negative direction with a property that costs over $2 million, which drastically throws the RMSE off for the model
+# The non-log model predicts a house to have a negative price...combined with the higher RMSE we won't use this model
 pred_vals2[pred_vals2 < 0]
 
-# Thus the final winner is the log model: 
+# Thus the final winner is the log model (which has the lowest RMSE of the two on the test data): 
     # lm(formula = log(Price) ~ Rooms + Type + Method + Distance + 
     # Bathroom + Car + Landsize + BuildingArea + YearBuilt + Regionname + 
     # Propertycount + I(Distance^2) + I(BuildingArea^2) + I(Propertycount^2) + 
@@ -257,21 +257,21 @@ loocv_RMSE = c(fw1_loocv, bw1_loocv, bw2_loocv, bw3_loocv, man4_loocv, fw2_loocv
 library(knitr)
 kable(model_data, format = "markdown", col.names = c("Models", "Train LOOCV RMSE"))
 ```
- - Above we see the LOOCV RMSE values using the training dataset, along with the two models selected for final comparison - the lowest non-long LOOCV RMSE model, and the lowest log-response LOOCV RMSE model, as they cannot be directly compared in that fashion. After further checks on the test data described in the `Methods` section, we determined the final model to be:
+ - Above we see the LOOCV RMSE values using the training dataset, along with the two models selected for final comparison - the lowest non-long LOOCV RMSE model, and the lowest log-response LOOCV RMSE model, as they cannot be directly compared in that fashion. After further checks on the test data shown in the `Methods` section, we determined the final model to be the log response contender:
  
  - Selected model: **lm(formula = log(Price) ~ Rooms + Type + Method + Distance + Bathroom + Car + Landsize + BuildingArea + YearBuilt + Regionname + Propertycount + I(Distance^2) + I(BuildingArea^2) + I(Propertycount^2) + Rooms:Type + Rooms:Car + Rooms:BuildingArea + Type:Landsize + Type:YearBuilt + Distance:Car + Distance:Landsize + Distance:BuildingArea + Distance:Regionname + Landsize:BuildingArea + Landsize:Propertycount + BuildingArea:YearBuilt + BuildingArea:Regionname + Regionname:Propertycount, data = housing_trn)**
 
 ```{r}
 # plot actual vs. predicted price values with the selected model
-plot(pred_vals ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Selected Log Model)", col = "dodgerblue", cex = 1)
+plot(pred_vals ~ housing_trn$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Selected Log Model)", col = "dodgerblue", cex = 1)
 abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
 
 # plot actual vs. predicted price values with the non-log alternate model
-plot(pred_vals2 ~ housing_tst$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Non-log Model)", col = "dodgerblue", cex = 1)
+plot(pred_vals2 ~ housing_trn$Price, xlab = "Actual Values ($)", ylab = "Predicted Values ($)", main = "Predicted vs. Actual Values (Non-log Model)", col = "dodgerblue", cex = 1)
 abline(0,1, col="darkorange", lwd = 1) # perfect response matches will be on this line
 ```
  
- - Here we see the two Actual vs. Predicted price plots of the final two models in contention. While both plots seem to follow the general trend of the test data, we see the one outlier negative price prediction from the log model which greatly affected the RMSE of that model on the test data. As a price should never be negative (unless somehow you paid someone to take a property off your hands...), this hints at a flaw in the non-log response model. Thus we can be more confident in the log-response model as we do not see any negative prices (nor would be expect any). The final RMSE of the selected model is `r final_model_RMSE`.
+ - Here we see the two Actual vs. Predicted price plots of the final two models in contention. While both plots seem to follow the general trend of the training data, we see more overestimates at the low end of the price spectrum, which is where we believe the model should be most accurate. In addition, we should bring up the one negative price prediction the non-log model produced (seen in the `Methods` section). As a price should never be negative (unless somehow you paid someone to take a property off your hands...), this hints at a flaw in the non-log response model. Thus we can be more confident in the log-response model as we do not see any negative prices (nor would be expect any). The final training RMSE of the selected model is `r final_model_RMSE`.
 
 ```{r}
 # This analysis is secondary to the goal of prediciting housing values (vs. explaining), but still worthy of investigating in case we did want to use the model for explanation
@@ -298,26 +298,32 @@ bptest(final_log_model)
  - We can see that the log-response model has a much better looking Normal Q-Q plot and Fitted vs. Residuals plot (though both still fail the Shapiro and Breusch-Pagan tests....which is ok if we are just using the model for prediction). This gives us even more confidence that the log model was the correct choice between the final two for prediction of housing prices, but it would be quite difficult (if not flawed) to use this model for explanation of relationships between predictors and the price response.
 
 ```{r}
-# Test performance of the log model on the held-out data from down-sampling
-remaining_test_data = housing[-downsample_idx, ]
-pred_vals = exp(predict(final_log_model, newdata = remaining_test_data))
-final_data_RMSE = sqrt(mean((pred_vals - remaining_test_data$Price)^2))
-(avg_pct_error2 = mean(abs((pred_vals - remaining_test_data$Price))/remaining_test_data$Price) * 100)
+# Training results table
+model_data2 = data.frame(row_labels=c("Final model", "Runner-up"),
+final_RMSE = c(final_model_RMSE, nonlog_model_RMSE),
+final_avg_pct_error = c(avg_pct_error1, avg_pct_error2))
+kable(model_data2, format = "markdown", col.names = c("Models", "Training RMSE", "Avg % Error"))
 
-model_data2 = data.frame(row_labels=c("Final model"),
-final_RMSE = c(final_data_RMSE),
-final_avg_pct_error = c(avg_pct_error2))
-kable(model_data2, format = "markdown", col.names = c("Models", "Hold-out RMSE", "Avg % Error"))
+# Performance of the log model on the test data
+pred_vals_final = exp(predict(final_log_model, newdata = housing_tst))
+final_data_test_RMSE = sqrt(mean((pred_vals_final - housing_tst$Price)^2))
+(avg_pct_error_final = mean(abs((pred_vals_final - housing_tst$Price))/housing_tst$Price) * 100)
+
+# Final results table
+model_data3 = data.frame(row_labels=c("Final model"),
+final_RMSE = c(final_data_test_RMSE),
+final_avg_pct_error = c(avg_pct_error_final))
+kable(model_data3, format = "markdown", col.names = c("Model", "Test RMSE", "Avg % Error"))
 ```
  
- - As it is frowned upon to compare models (and make a selection between two) based on the test set, we decided to use the data we took out through downsampling and calculated the RMSE on this un-used data. The table above displays the final results of our selected model on this 'second' test set.
+ - As it is frowned upon to compare models (and make a selection between two) based on the test set, we decided to use the training data and select the model with the lowest regular RMSE (which also happened to have the lowest average percent error) to be our final model. The table above displays the final results of our selected model on the test set.
 
 
 ***
 
 ### Discussion
 
- - After utilizing several regression methods (forward and backwards search with multiple linear regression, dummy variables, interaction, transformations, and polynomials), along with model selection methods such as BIC and training set LOOCV RMSE, we arrived at our final model. Using several starting points for both forward and backwards search, along with using some manually manipulated selection of predictors (based off of the search results), we then compared all the resulting models with one another using LOOCV RMSE. We picked the lowest  `log(Price)` model LOOCV RMSE and the lowest non-log response model LOOCV RMSE, and as we could not directly compare these two RMSE (different units), we had to examine further selection criteria. We used the test set RMSE values of the two models, and selected the final log-response model as it had a significantly lower RMSE (and also better model assumption plots, though still not ideal for using the model for explanation).
+ - After utilizing several regression methods (forward and backwards search with multiple linear regression, dummy variables, interaction, transformations, and polynomials), along with model selection methods such as BIC and training set LOOCV RMSE, we arrived at our final model. Using several starting points for both forward and backwards search, along with using some manually manipulated selection of predictors (based off of the search results), we then compared all the resulting models with one another using LOOCV RMSE. We picked the lowest  `log(Price)` model LOOCV RMSE and the lowest non-log response model LOOCV RMSE, and as we could not directly compare these two RMSE (different units), we had to examine further selection criteria. We used the training set regular RMSE values of the two models, and selected the final log-response model as it had a lower RMSE (and also better model assumption plots, though still not ideal for using the model for explanation).
  
  - As we can see with `r length(coef(final_log_model))` coefficients in the model, it is quite complex. But as our stated goal was to *predict* housing prices, we feel that having a model which we can't use to make conclusions about relationships of predictors to the response is an acceptable tradeoff to increase price prediction accuracy. 
  
